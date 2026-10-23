@@ -108,7 +108,7 @@ public class AppConfig {
 
         @Bean
         InMemoryQueue dispatchQueue(DeliveryProperties p, Clock clock) {
-            return new InMemoryQueue("dispatch", Duration.ofSeconds(p.visibilitySeconds()), p.maxReceiveCount(), clock);
+            return new InMemoryQueue("dispatch", Duration.ofSeconds(p.visibilitySeconds()), p.dispatchMaxReceiveCount(), clock);
         }
 
         @Bean
@@ -158,7 +158,7 @@ public class AppConfig {
 
         @Bean
         AwsResources awsResources(DynamoDbClient dynamo, SnsClient sns, SqsClient sqs, DeliveryProperties p) {
-            return AwsSetup.ensure(dynamo, sns, sqs, p.aws().prefix(), p.maxReceiveCount(), p.visibilitySeconds(), p.couriers());
+            return AwsSetup.ensure(dynamo, sns, sqs, p.aws().prefix(), p.maxReceiveCount(), p.dispatchMaxReceiveCount(), p.visibilitySeconds(), p.couriers());
         }
 
         @Bean

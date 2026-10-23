@@ -105,6 +105,15 @@ class OrderFlowTest {
     }
 
     @Test
+    void retryAfterACrashReusesTheCourierInsteadOfLeakingOne() {
+        Order o = place("r-brisket-co", "mac-cheese", 1, "key-0010");
+        String claimed = couriers.claimFor(o.orderId(), "east").orElseThrow(); // first attempt claimed, then crashed
+        pump();
+        assertThat(orders.find(o.orderId()).orElseThrow().courierId()).isEqualTo(claimed);
+        assertThat(couriers.available()).isZero(); // only one courier exists, and it was not claimed twice
+    }
+
+    @Test
     void restaurantRejectsWhenClosedOrSoldOut() {
         Order closed = orders.place("c", "r-night-owl", "north", List.of(new ItemRequest("pho", 1)), "key-0004").order();
         Order soldOut = place("r-taco-lab", "elote", 1, "key-0005");

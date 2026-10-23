@@ -40,9 +40,14 @@ public class QueueConsumer {
                 });
                 queue.delete(m);
                 handled++;
+            } catch (RetryLaterException e) {
+                failed++;
+                queue.retryAfter(m, e.delay());
+                LOG.fine(() -> queue.name() + ": " + m.event().orderId() + " retry " + m.receiveCount() + ": " + e.getMessage());
+                continue;
             } catch (RuntimeException e) {
                 failed++;
-                LOG.log(e instanceof RetryLaterException ? Level.INFO : Level.WARNING,
+                LOG.log(Level.WARNING,
                         () -> queue.name() + ": " + m.event().type() + " " + m.event().orderId()
                                 + " failed on delivery " + m.receiveCount() + ": " + e.getMessage());
             }

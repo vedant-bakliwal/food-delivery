@@ -83,6 +83,15 @@ public class InMemoryQueue implements MessageQueue {
     }
 
     @Override
+    public synchronized void retryAfter(QueueMessage message, Duration delay) {
+        for (Entry e : messages) {
+            if (e.id.equals(message.messageId()) && message.receipt().equals(e.receipt)) {
+                e.invisibleUntil = clock.instant().plus(delay);
+            }
+        }
+    }
+
+    @Override
     public synchronized long depth() {
         return messages.size();
     }

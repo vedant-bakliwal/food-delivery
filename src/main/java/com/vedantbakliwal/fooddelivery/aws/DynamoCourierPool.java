@@ -25,7 +25,12 @@ public class DynamoCourierPool implements CourierPool {
     }
 
     @Override
-    public Optional<String> claimNearest(String zone) {
+    public Optional<String> claimFor(String orderId, String zone) {
+        var mine = dynamo.scan(b -> b.tableName(table).consistentRead(true)
+                .filterExpression("orderId = :o").expressionAttributeValues(Map.of(":o", AttributeValue.fromS(orderId)))).items();
+        if (!mine.isEmpty()) {
+            return Optional.of(mine.get(0).get("pk").s()); // a retry: this order already has its courier
+        }
         var free = dynamo.scan(b -> b.tableName(table).consistentRead(true)
                         .filterExpression("#s = :a").expressionAttributeNames(Map.of("#s", "status"))
                         .expressionAttributeValues(Map.of(":a", AttributeValue.fromS("AVAILABLE")))).items().stream()
@@ -33,14 +38,35 @@ public class DynamoCourierPool implements CourierPool {
                 .map(i -> i.get("pk").s())
                 .toList();
         for (String id : free) {
-            if (setStatus(id, "AVAILABLE", "BUSY")) return Optional.of(id);
+            if (claim(id, orderId)) return Optional.of(id);
         }
         return Optional.empty();
     }
 
     @Override
     public void release(String courierId) {
-        setStatus(courierId, "BUSY", "AVAILABLE");
+        try {
+            dynamo.updateItem(b -> b.tableName(table).key(Map.of("pk", AttributeValue.fromS(courierId)))
+                    .updateExpression("SET #s = :a REMOVE orderId").conditionExpression("#s = :b")
+                    .expressionAttributeNames(Map.of("#s", "status"))
+                    .expressionAttributeValues(Map.of(":a", AttributeValue.fromS("AVAILABLE"), ":b", AttributeValue.fromS("BUSY"))));
+        } catch (ConditionalCheckFailedException e) {
+            // already free: releasing twice (a duplicate OrderDelivered) is harmless
+        }
+    }
+
+    /** AVAILABLE -> BUSY for this order, only if nobody claimed the courier first. */
+    private boolean claim(String id, String orderId) {
+        try {
+            dynamo.updateItem(b -> b.tableName(table).key(Map.of("pk", AttributeValue.fromS(id)))
+                    .updateExpression("SET #s = :b, orderId = :o").conditionExpression("#s = :a")
+                    .expressionAttributeNames(Map.of("#s", "status"))
+                    .expressionAttributeValues(Map.of(":a", AttributeValue.fromS("AVAILABLE"),
+                            ":b", AttributeValue.fromS("BUSY"), ":o", AttributeValue.fromS(orderId))));
+            return true;
+        } catch (ConditionalCheckFailedException e) {
+            return false;
+        }
     }
 
     @Override
@@ -48,17 +74,5 @@ public class DynamoCourierPool implements CourierPool {
         return dynamo.scan(b -> b.tableName(table).consistentRead(true).filterExpression("#s = :a")
                 .expressionAttributeNames(Map.of("#s", "status"))
                 .expressionAttributeValues(Map.of(":a", AttributeValue.fromS("AVAILABLE")))).count();
-    }
-
-    private boolean setStatus(String id, String from, String to) {
-        try {
-            dynamo.updateItem(b -> b.tableName(table).key(Map.of("pk", AttributeValue.fromS(id)))
-                    .updateExpression("SET #s = :to").conditionExpression("#s = :from")
-                    .expressionAttributeNames(Map.of("#s", "status"))
-                    .expressionAttributeValues(Map.of(":to", AttributeValue.fromS(to), ":from", AttributeValue.fromS(from))));
-            return true;
-        } catch (ConditionalCheckFailedException e) {
-            return false;
-        }
     }
 }

@@ -33,7 +33,8 @@ public final class AwsSetup {
     }
 
     public static AwsResources ensure(DynamoDbClient dynamo, SnsClient sns, SqsClient sqs, String prefix,
-                                      int maxReceiveCount, int visibilitySeconds, int couriers) {
+                                      int maxReceiveCount, int dispatchMaxReceiveCount,
+                                      int visibilitySeconds, int couriers) {
         String orders = table(dynamo, prefix + "-orders");
         String keys = table(dynamo, prefix + "-idempotency");
         String outbox = table(dynamo, prefix + "-outbox");
@@ -52,7 +53,7 @@ public final class AwsSetup {
 
         String topicArn = sns.createTopic(b -> b.name(prefix + "-order-events")).topicArn();
         String[] restaurant = queueWithDlq(sqs, prefix + "-restaurant", maxReceiveCount, visibilitySeconds, topicArn);
-        String[] dispatch = queueWithDlq(sqs, prefix + "-dispatch", maxReceiveCount, visibilitySeconds, topicArn);
+        String[] dispatch = queueWithDlq(sqs, prefix + "-dispatch", dispatchMaxReceiveCount, visibilitySeconds, topicArn);
         subscribe(sns, sqs, topicArn, restaurant[0], OrderEvent.Type.OrderPlaced);
         subscribe(sns, sqs, topicArn, dispatch[0], OrderEvent.Type.OrderAccepted, OrderEvent.Type.OrderDelivered);
         return new AwsResources(orders, keys, outbox, courierTable, topicArn, restaurant[0], restaurant[1], dispatch[0], dispatch[1]);

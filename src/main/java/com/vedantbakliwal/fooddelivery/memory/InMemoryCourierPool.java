@@ -11,32 +11,35 @@ import java.util.Optional;
 public class InMemoryCourierPool implements CourierPool {
 
     private final Map<String, String> zoneOf = new LinkedHashMap<>();
-    private final Map<String, Boolean> busy = new LinkedHashMap<>();
+    private final Map<String, String> orderOf = new LinkedHashMap<>(); // courier -> order, null when free
 
     /** Creates {@code count} couriers spread across the zones: courier-1 downtown, courier-2 east, ... */
     public InMemoryCourierPool(int count) {
         for (int i = 1; i <= count; i++) {
             String id = "courier-" + i;
             zoneOf.put(id, Menu.ZONES.get((i - 1) % Menu.ZONES.size()));
-            busy.put(id, false);
+            orderOf.put(id, null);
         }
     }
 
     @Override
-    public synchronized Optional<String> claimNearest(String zone) {
-        Optional<String> pick = busy.entrySet().stream().filter(e -> !e.getValue()).map(Map.Entry::getKey)
+    public synchronized Optional<String> claimFor(String orderId, String zone) {
+        for (Map.Entry<String, String> e : orderOf.entrySet()) {
+            if (orderId.equals(e.getValue())) return Optional.of(e.getKey());
+        }
+        Optional<String> pick = orderOf.entrySet().stream().filter(e -> e.getValue() == null).map(Map.Entry::getKey)
                 .min(Comparator.comparingInt(id -> Menu.distance(zoneOf.get(id), zone)));
-        pick.ifPresent(id -> busy.put(id, true));
+        pick.ifPresent(id -> orderOf.put(id, orderId));
         return pick;
     }
 
     @Override
     public synchronized void release(String courierId) {
-        busy.computeIfPresent(courierId, (k, v) -> false);
+        if (orderOf.containsKey(courierId)) orderOf.put(courierId, null);
     }
 
     @Override
     public synchronized long available() {
-        return busy.values().stream().filter(b -> !b).count();
+        return orderOf.values().stream().filter(v -> v == null).count();
     }
 }

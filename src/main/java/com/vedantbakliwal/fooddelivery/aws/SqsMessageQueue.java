@@ -53,6 +53,12 @@ public class SqsMessageQueue implements MessageQueue {
     }
 
     @Override
+    public void retryAfter(QueueMessage message, java.time.Duration delay) {
+        sqs.changeMessageVisibility(b -> b.queueUrl(queueUrl).receiptHandle(message.receipt())
+                .visibilityTimeout((int) Math.max(0, delay.toSeconds())));
+    }
+
+    @Override
     public long depth() {
         return count(queueUrl);
     }

@@ -43,12 +43,15 @@ public class DispatchWorker implements EventHandler {
             return; // duplicate: already assigned
         }
         Order order = found.get();
-        String courier = couriers.claimNearest(order.zone())
+        // Keyed by order: if an earlier attempt claimed a courier and then failed, we get the same courier back.
+        String courier = couriers.claimFor(order.orderId(), order.zone())
                 .orElseThrow(() -> new RetryLaterException("No courier free for " + order.orderId()));
         Order next = order.moveTo(OrderStatus.COURIER_ASSIGNED, courier, null, clock.instant());
         OrderEvent e = orders.event(OrderEvent.Type.CourierAssigned, next, Map.of("courierId", courier));
         if (!store.update(next, order.version(), new OutboxRecord(e, tracing.currentTraceparent()))) {
-            couriers.release(courier); // lost a race with a duplicate delivery: give the courier back
+            // Someone else changed the order first. Free our courier unless the order ended up with them anyway.
+            boolean ours = store.find(order.orderId()).map(o -> courier.equals(o.courierId())).orElse(false);
+            if (!ours) couriers.release(courier);
         }
     }
 }

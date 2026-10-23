@@ -10,6 +10,7 @@ import java.util.Set;
  */
 @ConfigurationProperties("fooddelivery")
 public record DeliveryProperties(String store, Set<String> roles, int couriers, int maxReceiveCount,
+                                 int dispatchMaxReceiveCount,
                                  int visibilitySeconds, Aws aws) {
 
     public record Aws(String endpoint, String region, String prefix) { }

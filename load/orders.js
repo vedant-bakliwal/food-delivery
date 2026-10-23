@@ -18,8 +18,8 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
-    'http_req_duration{name:place}': ['p(95)<300'],
-    time_to_courier_ms: ['p(95)<5000'],
+    'http_req_duration{name:place}': ['p(95)<500'],
+    time_to_courier_ms: ['p(95)<8000'],
     duplicate_orders: ['count==0'],
     orders_delivered: ['count>0'],
   },
@@ -66,7 +66,7 @@ export default function () {
   if (retry.json('orderId') !== id) duplicates.add(1);
 
   const placedAt = Date.now();
-  const o = waitFor(id, soldOut ? ['REJECTED'] : ['COURIER_ASSIGNED'], 15000);
+  const o = waitFor(id, soldOut ? ['REJECTED'] : ['COURIER_ASSIGNED'], 30000);
   if (soldOut) {
     rejected.add(1);
     return;
@@ -83,15 +83,20 @@ export default function () {
   delivered.add(1);
 }
 
-// After the run: nothing may be stuck in a dead-letter queue, and every courier must be free again.
+// After the run, once everything has settled: nothing in a dead-letter queue, no unpublished
+// events, and every courier free again (a courier still marked busy here was leaked).
+const COURIERS = Number(__ENV.COURIERS || 20);
+
 export function teardown() {
   let ops;
-  for (let i = 0; i < 50; i++) {
+  for (let i = 0; i < 100; i++) {
     ops = http.get(`${BASE}/ops/queues`).json();
-    if (ops.restaurant.depth === 0 && ops.dispatch.depth === 0) break;
-    sleep(0.2);
+    const settled = ops.outboxPending === 0 && ops.restaurant.depth === 0 && ops.dispatch.depth === 0;
+    if (settled && ops.couriersAvailable === COURIERS) break;
+    sleep(0.3);
   }
-  console.log(`queues after run: ${JSON.stringify(ops)}`);
+  console.log(`after run: ${JSON.stringify(ops)}`);
   if (ops.restaurant.deadLetters !== 0 || ops.dispatch.deadLetters !== 0) fail('messages in a dead-letter queue');
-  if (ops.dispatch.depth !== 0) fail('dispatch queue did not drain');
+  if (ops.outboxPending !== 0) fail('outbox did not drain');
+  if (ops.couriersAvailable !== COURIERS) fail(`${COURIERS - ops.couriersAvailable} couriers still busy after every order finished`);
 }

@@ -72,7 +72,7 @@ class AwsMotoTest {
         SnsClient sns = SnsClient.builder().endpointOverride(endpoint).region(Region.US_EAST_1).credentialsProvider(creds).build();
         SqsClient sqs = SqsClient.builder().endpointOverride(endpoint).region(Region.US_EAST_1).credentialsProvider(creds).build();
 
-        AwsResources r = AwsSetup.ensure(dynamo, sns, sqs, "it", 3, 2, 4);
+        AwsResources r = AwsSetup.ensure(dynamo, sns, sqs, "it", 3, 30, 2, 4);
         Json json = new Json(JsonMapper.builder().findAndAddModules()
                 .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS).build());
         store = new DynamoOrderStore(dynamo, r, json);
@@ -125,9 +125,10 @@ class AwsMotoTest {
 
     @Test
     void aCourierCannotBeClaimedTwice() {
-        String a = couriers.claimNearest("north").orElseThrow();
-        String b = couriers.claimNearest("north").orElseThrow();
+        String a = couriers.claimFor("ord-a", "north").orElseThrow();
+        String b = couriers.claimFor("ord-b", "north").orElseThrow();
         assertThat(a).isNotEqualTo(b);
+        assertThat(couriers.claimFor("ord-a", "north")).contains(a); // a retry for the same order gets the same courier
         couriers.release(a);
         couriers.release(b);
     }

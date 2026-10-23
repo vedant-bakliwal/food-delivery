@@ -14,6 +14,9 @@ public interface MessageQueue {
 
     void delete(QueueMessage message);
 
+    /** Hides the message for {@code delay} so it is retried sooner (or later) than the default visibility timeout. */
+    void retryAfter(QueueMessage message, java.time.Duration delay);
+
     long depth();
 
     long deadLetterDepth();

@@ -2,6 +2,7 @@ package com.vedantbakliwal.fooddelivery.web;
 
 import com.vedantbakliwal.fooddelivery.core.CourierPool;
 import com.vedantbakliwal.fooddelivery.core.MessageQueue;
+import com.vedantbakliwal.fooddelivery.core.OrderStore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -12,18 +13,20 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.Map;
 
-/** Operator view: queue and dead-letter depths, free couriers, and DLQ redrive. */
+/** Operator view: queue and dead-letter depths, unpublished outbox events, free couriers, and DLQ redrive. */
 @RestController
 @RequestMapping("/ops")
 public class OpsController {
 
     private final Map<String, MessageQueue> queues;
     private final CourierPool couriers;
+    private final OrderStore store;
 
     public OpsController(@Qualifier("restaurantQueue") MessageQueue restaurant, @Qualifier("dispatchQueue") MessageQueue dispatch,
-                         CourierPool couriers) {
+                         CourierPool couriers, OrderStore store) {
         this.queues = Map.of("restaurant", restaurant, "dispatch", dispatch);
         this.couriers = couriers;
+        this.store = store;
     }
 
     @GetMapping("/queues")
@@ -31,6 +34,7 @@ public class OpsController {
         Map<String, Object> out = new java.util.TreeMap<>();
         queues.forEach((name, q) -> out.put(name, Map.of("depth", q.depth(), "deadLetters", q.deadLetterDepth())));
         out.put("couriersAvailable", couriers.available());
+        out.put("outboxPending", store.pendingOutbox(1000).size());
         return out;
     }
 

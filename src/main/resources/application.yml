@@ -10,6 +10,7 @@ fooddelivery:
   roles: [api, relay, restaurant, dispatch]
   couriers: 20
   max-receive-count: 3              # deliveries before a message goes to the dead-letter queue
+  dispatch-max-receive-count: 30    # "no courier free" is normal at rush hour: retried every second for ~30 s before dead-lettering
   visibility-seconds: 5             # how long a received message stays hidden before redelivery
   poll-ms: 250
   aws:

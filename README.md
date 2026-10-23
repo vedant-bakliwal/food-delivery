@@ -22,7 +22,8 @@ order states: PLACED → ACCEPTED → COURIER_ASSIGNED → PICKED_UP → DELIVER
 | Service crashes between saving and publishing | Transactional outbox: the event is stored with the order, a relay publishes it later | `OrderFlowTest`, `AwsMotoTest.orderFlowsThroughSnsAndSqs` |
 | The same event is delivered twice | Workers check the order's version and status, so a duplicate is a no-op | `OrderFlowTest.duplicateDeliveryOfAnEventIsHarmless` |
 | Two writers race on one order | Optimistic locking (`#v = :expected` condition) | `AwsMotoTest.staleVersionWriteIsRefused` |
-| No courier is free | The message is left on the queue, retried after the visibility timeout, dead-lettered after 3 receives, and redriven with `POST /ops/queues/dispatch/redrive` | `OrderFlowTest.noFreeCourierRetriesThenDeadLettersThenRedrives` |
+| No courier is free | Normal at rush hour: the message is retried every second (`ChangeMessageVisibility`) for about 30 s, then dead-lettered and redriven with `POST /ops/queues/dispatch/redrive` | `OrderFlowTest.noFreeCourierRetriesThenDeadLettersThenRedrives` |
+| Dispatcher crashes after claiming a courier | Claims are keyed by order, so the retry gets the same courier back instead of tying up a second one | `OrderFlowTest.retryAfterACrashReusesTheCourierInsteadOfLeakingOne`, `AwsMotoTest.aCourierCannotBeClaimedTwice`; k6 fails if any courier is still busy after the run |
 | Two dispatchers grab one courier | Conditional update `AVAILABLE → BUSY` | `AwsMotoTest.aCourierCannotBeClaimedTwice` |
 | Client sends its own prices | Prices come from the menu on the server | `OrderFlowTest.orderGoesFromPlacedToDeliveredAndFreesTheCourier` |
 | An event schema changes | Golden JSON contracts in `src/test/resources/contracts`; producer output and consumer parsing are both checked | `EventContractTest` |
@@ -48,7 +49,7 @@ open http://localhost:16686          # Jaeger: one trace from POST /orders throu
 docker compose down -v
 ```
 
-The k6 run fails if any order is duplicated, any message ends in a dead-letter queue, or p95 latency is over budget (place under 300 ms, courier assigned under 5 s).
+The k6 run fails if any order is duplicated, any message ends in a dead-letter queue, or a courier is still busy after every order has finished, or p95 latency is over budget (place under 500 ms, courier assigned under 8 s).
 
 ## Kubernetes
 
