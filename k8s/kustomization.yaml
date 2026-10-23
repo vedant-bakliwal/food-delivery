@@ -1,0 +1,11 @@
+# kubectl apply -k k8s/   (tested on kind; see README)
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: food-delivery
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - moto.yaml
+  - api.yaml
+  - workers.yaml
+  - hpa.yaml

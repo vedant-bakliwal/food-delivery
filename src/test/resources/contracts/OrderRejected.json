@@ -1,0 +1,8 @@
+{
+  "eventId": "evt-2b6f0d4e-1c1a-4f6e-9a57-0c9b2c1d7e11",
+  "type": "OrderRejected",
+  "orderId": "ord-7c1e9a52-3f0b-4b7a-9d55-6a4f0e2b8c33",
+  "orderVersion": 2,
+  "occurredAt": "2026-11-01T18:00:00Z",
+  "data": { "reason": "restaurant is closed" }
+}

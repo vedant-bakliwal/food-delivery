@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test (AWS adapter tests run against Moto in Docker via Testcontainers)
+        run: mvn -B verify
+
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate Kubernetes manifests against the API schemas
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.6.7/kubeconform-linux-amd64.tar.gz | tar xz
+          kubectl kustomize k8s > rendered.yaml
+          ./kubeconform -strict -summary -kubernetes-version 1.31.0 rendered.yaml
+
+  load:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start API, restaurant and dispatch workers, Moto (DynamoDB/SNS/SQS) and Jaeger
+        run: docker compose up --build -d --wait
+      - name: Lunch-rush load test (10% sold-out orders, every order retried with the same key)
+        run: |
+          docker run --rm --network host -v "$PWD/load:/load" grafana/k6:0.54.0 \
+            run -e VUS=15 -e DURATION=60s /load/orders.js
+      - name: A trace spans all three services
+        run: |
+          sleep 5
+          curl -sf "localhost:16686/api/services" | tee services.json
+          for s in order-api restaurant-worker dispatch-worker; do grep -q "$s" services.json || { echo "no traces from $s"; exit 1; }; done
+      - name: Logs
+        if: failure()
+        run: docker compose logs api restaurant-worker dispatch-worker | tail -300
+      - name: Stop
+        if: always()
+        run: docker compose down -v

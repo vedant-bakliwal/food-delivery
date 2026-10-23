@@ -1,0 +1,58 @@
+# One image, three roles. The API also runs the outbox relay; the two workers only consume.
+# Moto stands in for DynamoDB, SNS and SQS; Jaeger shows one trace per order across all three.
+x-app: &app
+  build: .
+  image: food-delivery:local
+  environment: &env
+    SPRING_PROFILES_ACTIVE: docker
+    AWS_ENDPOINT: http://moto:5000
+    OTLP_ENDPOINT: http://jaeger:4318/v1/traces
+
+services:
+  moto:
+    image: motoserver/moto:latest
+    ports: ["5000:5000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/moto-api/')"]
+      interval: 2s
+      retries: 30
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686"]
+
+  api:
+    <<: *app
+    container_name: food-api
+    environment:
+      <<: *env
+      SPRING_APPLICATION_NAME: order-api
+      FOODDELIVERY_ROLES: api,relay
+    ports: ["8080:8080"]
+    depends_on:
+      moto: { condition: service_healthy }
+      jaeger: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/8080 && printf 'GET /actuator/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q UP <&3"]
+      interval: 3s
+      retries: 40
+
+  restaurant-worker:
+    <<: *app
+    environment:
+      <<: *env
+      SPRING_APPLICATION_NAME: restaurant-worker
+      FOODDELIVERY_ROLES: restaurant
+    depends_on:
+      api: { condition: service_healthy }
+
+  dispatch-worker:
+    <<: *app
+    environment:
+      <<: *env
+      SPRING_APPLICATION_NAME: dispatch-worker
+      FOODDELIVERY_ROLES: dispatch
+    depends_on:
+      api: { condition: service_healthy }

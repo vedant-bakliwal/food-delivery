@@ -1,0 +1,70 @@
+---
+# Restaurant worker: consumes its SQS queue only; scale it independently of the API.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: restaurant-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: restaurant-worker }
+  template:
+    metadata:
+      labels: { app: restaurant-worker }
+    spec:
+      containers:
+        - name: app
+          image: food-delivery:local
+          imagePullPolicy: IfNotPresent
+          envFrom: [{ configMapRef: { name: food-delivery } }]
+          env:
+            - { name: SPRING_APPLICATION_NAME, value: restaurant-worker }
+            - { name: FOODDELIVERY_ROLES, value: restaurant }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 3
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { memory: 768Mi }
+---
+# Dispatch worker: consumes its SQS queue only; scale it independently of the API.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dispatch-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: dispatch-worker }
+  template:
+    metadata:
+      labels: { app: dispatch-worker }
+    spec:
+      containers:
+        - name: app
+          image: food-delivery:local
+          imagePullPolicy: IfNotPresent
+          envFrom: [{ configMapRef: { name: food-delivery } }]
+          env:
+            - { name: SPRING_APPLICATION_NAME, value: dispatch-worker }
+            - { name: FOODDELIVERY_ROLES, value: dispatch }
+          startupProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 3
+            failureThreshold: 40
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8080 }
+            periodSeconds: 10
+          readinessProbe:
+            httpGet: { path: /actuator/health/readiness, port: 8080 }
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 250m, memory: 384Mi }
+            limits: { memory: 768Mi }

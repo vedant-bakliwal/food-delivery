@@ -1,0 +1,30 @@
+# Stand-in for DynamoDB, SNS and SQS inside the cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: moto
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: moto }
+  template:
+    metadata:
+      labels: { app: moto }
+    spec:
+      containers:
+        - name: moto
+          image: motoserver/moto:latest
+          ports: [{ containerPort: 5000 }]
+          readinessProbe:
+            httpGet: { path: /moto-api/, port: 5000 }
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 512Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: moto
+spec:
+  selector: { app: moto }
+  ports: [{ port: 5000, targetPort: 5000 }]

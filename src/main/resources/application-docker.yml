@@ -1,0 +1,11 @@
+fooddelivery:
+  store: aws
+  aws:
+    endpoint: ${AWS_ENDPOINT:http://moto:5000}
+
+management:
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://jaeger:4318/v1/traces}
+      export:
+        enabled: true

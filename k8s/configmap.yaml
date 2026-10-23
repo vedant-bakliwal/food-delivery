@@ -1,0 +1,12 @@
+# Shared settings. For real AWS: set AWS_ENDPOINT to "" and give the pods an IAM role
+# (EKS Pod Identity or IRSA) instead of the test credentials Moto accepts.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: food-delivery
+data:
+  SPRING_PROFILES_ACTIVE: docker
+  AWS_ENDPOINT: http://moto:5000
+  MANAGEMENT_OTLP_TRACING_EXPORT_ENABLED: "false"
+  FOODDELIVERY_MAX_RECEIVE_COUNT: "3"
+  FOODDELIVERY_VISIBILITY_SECONDS: "5"
