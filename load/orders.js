@@ -46,6 +46,19 @@ function waitFor(id, statuses, timeoutMs) {
   fail(`order ${id} stuck before ${statuses}`);
 }
 
+// Warm-up before measuring: the first orders after startup pay for JIT compilation and cold
+// connections to DynamoDB/SNS/SQS, which is startup cost, not steady-state latency.
+export function setup() {
+  for (let i = 0; i < 15; i++) {
+    const r = http.post(`${BASE}/orders`, JSON.stringify({ customerId: 'warmup', restaurantId: 'r-brisket-co', zone: 'downtown',
+      items: [{ sku: 'mac-cheese', quantity: 1 }] }), { headers: { ...JSON_HEADERS, 'Idempotency-Key': `warmup-${i}-${Date.now()}` } });
+    const o = waitFor(r.json('orderId'), ['COURIER_ASSIGNED'], 60000);
+    const c = JSON.stringify({ courierId: o.courierId });
+    http.post(`${BASE}/orders/${o.orderId}/pickup`, c, { headers: JSON_HEADERS });
+    http.post(`${BASE}/orders/${o.orderId}/deliver`, c, { headers: JSON_HEADERS });
+  }
+}
+
 export default function () {
   const soldOut = Math.random() < 0.1; // 10% ask for an item the restaurant has run out of
   const pick = soldOut ? { restaurantId: 'r-taco-lab', zone: 'east', sku: 'elote' } : MENU[Math.floor(Math.random() * MENU.length)];
